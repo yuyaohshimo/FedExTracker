@@ -3,42 +3,47 @@ import * as fs from 'fs';
 import axios from 'axios';
 import chunk from 'lodash.chunk';
 import 'dotenv/config';
+import { z } from 'zod';
 
-export const DeliveryStatusMap = {
-  DL: 'Delivered',
-  IT: 'In transit',
-  IN: 'Initiated',
-  CA: 'Cancelled',
-  SE: 'Shipment exception',
-  DE: 'Delivery exception',
-  DY: 'Delay',
-};
+const TrackingSchema = z.object({
+  trackingNumber: z.string(),
+  trackResults: z.array(
+    z.object({
+      latestStatusDetail: z.object({
+        code: z.string(),
+        derivedCode: z.string(),
+        statusByLocale: z.string(),
+        description: z.string(),
+      }),
+      dateAndTimes: z.array(
+        z.object({
+          type: z.string(),
+          dateTime: z.string(),
+        }),
+      ),
+      scanEvents: z.array(
+        z.object({
+          date: z.string(),
+          eventType: z.string(),
+          derivedStatusCode: z.string(),
+        }),
+      ),
+      standardTransitTimeWindow: z.object({
+        window: z.object({
+          ends: z.string(),
+        }),
+      }),
+      error: z
+        .object({
+          code: z.string(),
+          message: z.string(),
+        })
+        .optional(),
+    }),
+  ),
+});
 
-export interface Tracking {
-  trackingNumber: string;
-  trackResults: {
-    latestStatusDetail: {
-      code: string;
-      derivedCode: string;
-      statusByLocale: string;
-      description: string;
-    };
-    dateAndTimes?: [
-      {
-        type: 'ACTUAL_DELIVERY';
-        dateTime: string;
-      },
-    ];
-    scanEvents: [
-      {
-        date: string;
-        eventType: 'PU';
-        derivedStatusCode: 'PU';
-      },
-    ];
-    error?: { code: string; message: string };
-  }[];
-}
+type Tracking = z.infer<typeof TrackingSchema>;
 
 export async function getTrackings(trackingNumbers: string[]) {
   const getAuth = await axios<{
@@ -80,7 +85,9 @@ export async function getTrackings(trackingNumbers: string[]) {
       },
     });
 
-    return res.data.output.completeTrackResults;
+    return res.data.output.completeTrackResults.map((trackResult) => {
+      return TrackingSchema.parse(trackResult);
+    });
   }
 
   let trackings: { [trackingNumber: string]: Tracking } = {};
