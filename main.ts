@@ -9,60 +9,72 @@ const TrackingSchema = z.object({
   trackingNumber: z.string(),
   trackResults: z.array(
     z.object({
-      latestStatusDetail: z.object({
-        code: z.string(),
-        derivedCode: z.string(),
-        statusByLocale: z.string(),
-        description: z.string(),
-      }),
-      dateAndTimes: z.array(
-        z.object({
-          type: z.string(),
-          dateTime: z.string(),
-        }),
-      ),
-      scanEvents: z.array(
-        z.object({
-          date: z.string(),
-          eventType: z.string(),
-          derivedStatusCode: z.string(),
-        }),
-      ),
-      standardTransitTimeWindow: z.object({
-        window: z.object({
-          ends: z.string(),
-        }),
-      }),
-      serviceDetail: z.object({
-        type: z.string(),
-        description: z.string(),
-        shortDescription: z.string(),
-      }),
-      packageDetails: z.object({
-        packagingDescription: z.object({
+      latestStatusDetail: z
+        .object({
+          code: z.string(),
+          derivedCode: z.string(),
+          statusByLocale: z.string(),
+          description: z.string(),
+        })
+        .optional(),
+      dateAndTimes: z
+        .array(
+          z.object({
+            type: z.string(),
+            dateTime: z.string(),
+          }),
+        )
+        .optional(),
+      scanEvents: z
+        .array(
+          z.object({
+            date: z.string(),
+            eventType: z.string(),
+            derivedStatusCode: z.string(),
+          }),
+        )
+        .optional(),
+      standardTransitTimeWindow: z
+        .object({
+          window: z.object({
+            ends: z.string(),
+          }),
+        })
+        .optional(),
+      serviceDetail: z
+        .object({
           type: z.string(),
           description: z.string(),
-        }),
-        physicalPackagingType: z.string(),
-        sequenceNumber: z.string(),
-        count: z.string(),
-        weightAndDimensions: z.object({
-          weight: z.array(
-            z.object({
-              value: z.string(),
-              unit: z.string(),
-            }),
-          ),
-          dimensions: z.array(
-            z.object({
-              length: z.number(),
-              width: z.number(),
-              height: z.number(),
-              units: z.string(),
-            }),
-          ),
-        }),
-      }),
+          shortDescription: z.string(),
+        })
+        .optional(),
+      packageDetails: z
+        .object({
+          packagingDescription: z.object({
+            type: z.string(),
+            description: z.string(),
+          }),
+          physicalPackagingType: z.string(),
+          sequenceNumber: z.string(),
+          count: z.string(),
+          weightAndDimensions: z.object({
+            weight: z.array(
+              z.object({
+                value: z.string(),
+                unit: z.string(),
+              }),
+            ),
+            dimensions: z.array(
+              z.object({
+                length: z.number(),
+                width: z.number(),
+                height: z.number(),
+                units: z.string(),
+              }),
+            ),
+          }),
+        })
+        .optional(),
       error: z
         .object({
           code: z.string(),
@@ -160,56 +172,61 @@ async function main() {
 
   const trackings = await getTrackings(trackingNumbers);
 
-  let output: Output[] = [];
+  let output: { [trackingNumber: string]: Output } = {};
 
   for (const trackingNumber of Object.keys(trackings)) {
     const tracking = trackings[trackingNumber].trackResults[0];
 
-    const trackingStatus = tracking.latestStatusDetail.statusByLocale;
-    const standardTransitDate = tracking.standardTransitTimeWindow.window.ends;
+    const trackingStatus = tracking.latestStatusDetail?.statusByLocale;
+    const standardTransitDate = tracking.standardTransitTimeWindow?.window.ends;
     let actualDeliveryDate = '';
-    for (const dateAndTime of tracking.dateAndTimes) {
-      if (dateAndTime.type === 'ACTUAL_DELIVERY') {
-        actualDeliveryDate = dateAndTime.dateTime;
+    if (tracking.dateAndTimes) {
+      for (const dateAndTime of tracking.dateAndTimes) {
+        if (dateAndTime.type === 'ACTUAL_DELIVERY') {
+          actualDeliveryDate = dateAndTime.dateTime;
+        }
       }
     }
-    const delayInDays =
-      (new Date(actualDeliveryDate).getTime() -
-        new Date(standardTransitDate).getTime()) /
-      (24 * 60 * 60 * 1000);
-    const serviceType = tracking.serviceDetail.description;
+    let delayInDays: number = 0;
+    if (actualDeliveryDate && standardTransitDate) {
+      delayInDays =
+        (new Date(actualDeliveryDate).getTime() -
+          new Date(standardTransitDate).getTime()) /
+        (24 * 60 * 60 * 1000);
+    }
+    const serviceType = tracking.serviceDetail?.description;
     const weightValue =
-      tracking.packageDetails.weightAndDimensions.weight[0].value;
+      tracking.packageDetails?.weightAndDimensions.weight[0].value;
     const weightUnit =
-      tracking.packageDetails.weightAndDimensions.weight[0].unit;
+      tracking.packageDetails?.weightAndDimensions.weight[0].unit;
     const dimensionLength =
-      tracking.packageDetails.weightAndDimensions.dimensions[0].length;
+      tracking.packageDetails?.weightAndDimensions.dimensions[0].length;
     const dimensionWidth =
-      tracking.packageDetails.weightAndDimensions.dimensions[0].width;
+      tracking.packageDetails?.weightAndDimensions.dimensions[0].width;
     const dimensionHeight =
-      tracking.packageDetails.weightAndDimensions.dimensions[0].height;
+      tracking.packageDetails?.weightAndDimensions.dimensions[0].height;
     const dimensionUnit =
-      tracking.packageDetails.weightAndDimensions.dimensions[0].units;
+      tracking.packageDetails?.weightAndDimensions.dimensions[0].units;
 
-    output.push({
+    output[trackingNumber] = {
       trackingNumber,
-      trackingStatus,
-      standardTransitDate,
+      trackingStatus: trackingStatus || '',
+      standardTransitDate: standardTransitDate || '',
       actualDeliveryDate,
       delayInDays,
-      serviceType,
-      weightValue,
-      weightUnit,
-      dimensionLength,
-      dimensionWidth,
-      dimensionHeight,
-      dimensionUnit,
-    });
+      serviceType: serviceType || '',
+      weightValue: weightValue || '',
+      weightUnit: weightUnit || '',
+      dimensionLength: dimensionLength || 0,
+      dimensionWidth: dimensionWidth || 0,
+      dimensionHeight: dimensionHeight || 0,
+      dimensionUnit: dimensionUnit || '',
+    };
   }
 
   const header = Object.keys(outputSchema.shape).join(',');
-  const outputCSV = output
-    .map((row) => Object.values(row).join(','))
+  const outputCSV = trackingNumbers
+    .map((trackingNumber) => Object.values(output[trackingNumber]))
     .join('\n');
 
   fs.writeFileSync('output.csv', `${header}\n${outputCSV}`, 'utf8');
