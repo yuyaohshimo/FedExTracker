@@ -181,7 +181,7 @@ async function main() {
 
   const trackings = await getTrackings(trackingNumbers);
 
-  let output: { [trackingNumber: string]: Output } = {};
+  const output: { [trackingNumber: string]: Output } = {};
 
   for (const trackingNumber of Object.keys(trackings)) {
     const tracking = trackings[trackingNumber].trackResults[0];
