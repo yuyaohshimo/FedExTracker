@@ -37,7 +37,7 @@ const TrackingSchema = z.object({
       standardTransitTimeWindow: z
         .object({
           window: z.object({
-            ends: z.string(),
+            ends: z.string().optional(),
           }),
         })
         .optional(),
@@ -64,14 +64,16 @@ const TrackingSchema = z.object({
                 unit: z.string(),
               }),
             ),
-            dimensions: z.array(
-              z.object({
-                length: z.number(),
-                width: z.number(),
-                height: z.number(),
-                units: z.string(),
-              }),
-            ),
+            dimensions: z
+              .array(
+                z.object({
+                  length: z.number(),
+                  width: z.number(),
+                  height: z.number(),
+                  units: z.string(),
+                }),
+              )
+              .optional(),
           }),
         })
         .optional(),
@@ -90,6 +92,7 @@ type Tracking = z.infer<typeof TrackingSchema>;
 const outputSchema = z.object({
   trackingNumber: z.string(),
   trackingStatus: z.string(),
+  shipDate: z.string(),
   standardTransitDate: z.string(),
   actualDeliveryDate: z.string(),
   delayInDays: z.number(),
@@ -145,7 +148,13 @@ export async function getTrackings(trackingNumbers: string[]) {
     });
 
     return res.data.output.completeTrackResults.map((trackResult) => {
-      return TrackingSchema.parse(trackResult);
+      try {
+        return TrackingSchema.parse(trackResult);
+      } catch (e) {
+        console.log('error parsing tracking', trackResult);
+        console.error(e);
+        throw e;
+      }
     });
   }
 
@@ -179,11 +188,14 @@ async function main() {
 
     const trackingStatus = tracking.latestStatusDetail?.statusByLocale;
     const standardTransitDate = tracking.standardTransitTimeWindow?.window.ends;
+    let shipDate = '';
     let actualDeliveryDate = '';
     if (tracking.dateAndTimes) {
       for (const dateAndTime of tracking.dateAndTimes) {
         if (dateAndTime.type === 'ACTUAL_DELIVERY') {
           actualDeliveryDate = dateAndTime.dateTime;
+        } else if (dateAndTime.type === 'SHIP') {
+          shipDate = dateAndTime.dateTime;
         }
       }
     }
@@ -200,17 +212,18 @@ async function main() {
     const weightUnit =
       tracking.packageDetails?.weightAndDimensions.weight[0].unit;
     const dimensionLength =
-      tracking.packageDetails?.weightAndDimensions.dimensions[0].length;
+      tracking.packageDetails?.weightAndDimensions.dimensions?.[0].length;
     const dimensionWidth =
-      tracking.packageDetails?.weightAndDimensions.dimensions[0].width;
+      tracking.packageDetails?.weightAndDimensions.dimensions?.[0].width;
     const dimensionHeight =
-      tracking.packageDetails?.weightAndDimensions.dimensions[0].height;
+      tracking.packageDetails?.weightAndDimensions.dimensions?.[0].height;
     const dimensionUnit =
-      tracking.packageDetails?.weightAndDimensions.dimensions[0].units;
+      tracking.packageDetails?.weightAndDimensions.dimensions?.[0].units;
 
     output[trackingNumber] = {
       trackingNumber,
       trackingStatus: trackingStatus || '',
+      shipDate: shipDate || '',
       standardTransitDate: standardTransitDate || '',
       actualDeliveryDate,
       delayInDays,
