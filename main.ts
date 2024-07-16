@@ -54,7 +54,7 @@ const TrackingSchema = z.object({
             type: z.string(),
             description: z.string(),
           }),
-          physicalPackagingType: z.string(),
+          physicalPackagingType: z.string().optional(),
           sequenceNumber: z.string(),
           count: z.string(),
           weightAndDimensions: z.object({
